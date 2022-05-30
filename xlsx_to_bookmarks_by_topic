@@ -1,0 +1,71 @@
+%macro xlsx_to_bookmarks_by_topic(input_xlsx=, output_ps=bm_by_topic, formsortvar=formname);
+
+  * author : Noory Kim;
+  * version : 0.1 (04APR2022);
+  * parameters;
+  * input_xlsx : name of input file (Excel XLSX) with bookmark data;
+  * output_ps : name of output file (PostScript) with PDFMARK bookmarks;
+  * default value: bm_by_topic;
+  * formsortvar : sort topics alphabetically (=formname) or in order of appearance (=pagenum)
+  * default value: formname;
+  
+* import source data;
+
+  proc import file="&input_xlsx..xlsx" out=_010 dbms=xlsx replace;
+  run;
+  
+* get counts for nesting bookmarks ;
+
+  proc sql;
+    create table _020 as
+      select *
+      , count(*) as count
+      , put(count(*), 8.) as countc
+      from _010
+      group by formname
+      order by formname, visitseq
+    ;
+  quit;
+  
+* get number of visits;
+
+  proc sql;
+    create table _030 as
+      select *
+      , count(unique formname) as n_formname
+      from _020
+    ;
+  quit;
+
+* sort source data;
+
+  proc sort data=_030 out=_077;
+    by &FORMSORTVAR. visitseq;
+  run;
+  
+* generate and output postscript file with PDFMARK syntax;
+
+  data _null_;
+    file "&output_ps..ps" ;
+    set _077;
+    by &FORMSORTVAR.;
+    
+    if _n_ = 1 then do;
+      put '[ /PageMode /UseOutlines /Page 1 /View [/Fit] /DOCVIEW pdfmark';
+      put '[ /Page 1 /View [/XYZ null null 0] /Title (Forms) /Count ' n_formname ' /OUT pdfmark';
+    end;
+    
+    if first.&FORMSORTVAR. = 1 then do;
+      put '[ /Page ' pagenum ' /View [/XYZ null null 0] /Title (' formname ') /Count ' countc ' /OUT pdfmark';
+    end;
+    
+      put '[ /Page ' pagenum ' /View [/XYZ null null 0] /Title (' visit ') /OUT pdfmark';
+      
+  run;
+  
+%mend;
+
+* sample macro calls;
+
+%xlsx_to_bookmarks_by_topic(input_xlsx=bookmark_data, output_ps=bm_by_topic_formname, formsortvar=formname);
+%xlsx_to_bookmarks_by_topic(input_xlsx=bookmark_data, output_ps=bm_by_topic_pagenum,  formsortvar=pagenum);
